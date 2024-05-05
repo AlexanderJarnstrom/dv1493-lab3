@@ -1,6 +1,6 @@
   .data
 buf: .space 20 
-test_bux: .space 10
+test_buf: .space 10
 pos: .byte 0
   .text
   .global main
@@ -17,7 +17,7 @@ main:
   movq $0, %r10
   movq $0, %r11   
   # Nice 0:s everywhere
-  leaq test_bux, %rdi 
+  leaq test_buf, %rdi 
   movq $5, %rsi
   call getText
   ret
