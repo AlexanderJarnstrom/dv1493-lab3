@@ -1,6 +1,7 @@
   .data
 buf: .space 20 
-pos: .word 0
+test_buf: .space 10
+pos: .byte 0
   .text
   .global main
 
@@ -16,13 +17,15 @@ main:
   movq $0, %r10
   movq $0, %r11   
   # Nice 0:s everywhere
-  call inImage
-  call getInt
+  leaq test_buf, %rdi 
+  movq $5, %rsi
+  call getText
   ret
 
 # Output
 
 inImage:
+  pushq %rax
   pushq %rbx
   pushq %rcx
   pushq %rdx
@@ -49,6 +52,7 @@ inImage:
   popq %rdx
   popq %rcx
   popq %rbx
+  popq %rax
   ret
 
 
@@ -120,7 +124,49 @@ getIntReturn:
   popq %r8
   ret
 
+
 getText:
+# Get n characters from input_buffer
+# Parameters:
+#   rdi: buffer to store characters
+#   rsi: number of characters to read
+# Returns:
+#   rax: number of characters read
+  pushq %rbx
+  pushq %rcx
+  pushq %rdx
+
+  movq $0x0, %rax
+  movq $0x0, %rbx
+  movq $0x0, %rdx
+
+  leaq buf, %rcx            # rcx = buf
+  movq pos, %rdx            # rdx = pos
+  movb (%rcx, %rdx), %bl    # dl = *(buf + pos)
+
+  cmpb $0x0, %bl            # dl == 0x0
+  jne getTextLoop
+  call inImage
+
+getTextLoop:
+  movb (%rcx, %rdx), %bl    # dl = *(buf + pos)
+  incq %rdx
+  movb %bl, (%rdi, %rax)    # *(rdi + rax) = dl
+  incq %rax
+  
+  cmpb $0x0, %bl            # bh == 0x0
+  je getTextEndLoop
+  cmpq %rsi, %rax           # rbx == rsi
+  je getTextEndLoop
+  jmp getTextLoop
+
+getTextEndLoop: 
+  popq %rdx
+  popq %rcx
+  popq %rbx
+  ret
+
+
 getChar:
 setInPos:
 
