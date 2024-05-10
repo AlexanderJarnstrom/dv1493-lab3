@@ -1,6 +1,5 @@
   .data
 buf: .space 20 
-test_buf: .space 10
 pos: .byte 0
   .text
   .global main
@@ -17,9 +16,9 @@ main:
   movq $0, %r10
   movq $0, %r11   
   # Nice 0:s everywhere
-  leaq test_buf, %rdi 
-  movq $5, %rsi
-  call getText
+  movq $16, %rdi
+  call setInPos
+  movq pos, %rdi
   ret
 
 # Output
@@ -161,6 +160,7 @@ getTextLoop:
   jmp getTextLoop
 
 getTextEndLoop: 
+  movq %rdx, pos
   popq %rdx
   popq %rcx
   popq %rbx
@@ -168,7 +168,58 @@ getTextEndLoop:
 
 
 getChar:
+# Gets one char from buffer
+# Returns:
+#   rax: the char
+  pushq %rbx
+  pushq %rcx
+  pushq %rdx
+
+  movq $0x0, %rbx
+  leaq buf, %rcx
+
+getCharRetry:
+  movq pos, %rdx
+  movb (%rcx, %rdx), %bl
+
+  cmpb $0x0, %bl
+  jne getCharReturn
+  call inImage
+  jmp getCharRetry
+
+getCharReturn:
+  movq $0x0, %rax
+  movb %bl, %al
+  popq %rdx
+  popq %rcx
+  popq %rbx
+  ret
+  
+
 setInPos:
+# Sets pos to n
+# Parameter:
+#   %rdi: n
+  pushq %rdi
+
+  cmpq $0, %rdi
+  jl setInPosLow
+  cmpq $19, %rdi
+  jg setInPosHigh
+
+setInPosRet:
+  movq %rdi, pos
+  popq %rdi
+  ret
+
+setInPosLow:
+  movq $0, %rdi
+  jmp setInPosRet
+
+setInPosHigh:
+  movq $19, %rdi
+  jmp setInPosRet
+
 
 # Input
 
