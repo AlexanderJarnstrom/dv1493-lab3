@@ -15,4 +15,44 @@ main:
 	call	outImage
 	call	inImage
 	movq	$5,count
-  ret
+l1:
+	call	getInt
+	movq	%rax,temp
+	cmpq	$0,%rax
+	jge		l2
+	call	getOutPos
+	decq	%rax
+	movq	%rax,%rdi
+	call	setOutPos
+l2:
+	movq	temp,%rdx
+	add	%rdx,sum
+	movq	%rdx,%rdi
+	call	putInt
+	movq	$'+',%rdi
+	call	putChar
+	decq	count
+	cmpq	$0,count
+	jne	l1
+	call	getOutPos
+	decq	%rax
+	movq	%rax,%rdi
+	call	setOutPos
+	movq	$'=',%rdi
+	call	putChar
+	movq	sum, %rdi
+	call	putInt
+	call	outImage
+	movq	$12,%rsi
+	movq	$buf,%rdi
+	call	getText
+	movq	$buf,%rdi
+	call	putText
+	movq	$125,%rdi
+	call	putInt
+	call	outImage
+	movq	$endMsg,%rdi
+	call	putText
+	call	outImage
+	popq	%rax
+	ret

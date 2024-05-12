@@ -252,6 +252,80 @@ outImage:
 
 
 putInt:
+# Adds n to out_buf
+# Parameter:
+#   - %rdi: n
+  pushq %rsi
+  pushq %rax
+  pushq %rdi
+  pushq %rdx
+  pushq %r8
+  pushq %r9
+  pushq %r10
+  pushq %r11
+
+  movq $1, %rsi
+
+ putIntFindSize:
+  imulq $10, %rsi
+  movq %rdi, %rax
+  movq $0, %rdx
+  idivq %rsi
+
+  cmp $10, %rax
+  jg putIntFindSize
+
+  leaq out_buf, %r8
+  movq out_pos, %r9
+  movq $0, %r10
+  movq $10, %r11
+
+putIntConvert:
+  addq %rax, %r10       # m = m + n
+  imulq $10, %r10       # m = m * 10
+  addq $0x30, %rax      # n = n + 0x30
+
+  movq %rax, (%r8, %r9) # n => (out_buf, out_pos)
+  incq %r9
+
+  movq %rsi, %rax
+  movq $0, %rdx         # x = x / 10
+  idivq %r11
+  movq %rax, %rsi
+
+  cmp $0, %rsi
+  je putIntRet
+
+  movq %rdi, %rax
+  movq $0, %rdx         # n = y / x
+  idivq %rsi
+
+  subq %r10, %rax
+  
+  cmp $5, %r9
+  je putIntFullBuff
+
+  jmp putIntConvert
+
+putIntRet:
+  movq %r9, out_pos
+  popq %r11
+  popq %r10
+  popq %r9
+  popq %r8
+  popq %rax
+  popq %rdi
+  popq %rdx
+  popq %rsi
+  ret
+
+putIntFullBuff:
+  call outImage
+  movq out_pos, %r9
+  jmp putIntConvert
+
+
+
 putText:
 # Parameter:
 #   - %rdi: string pointer
@@ -295,7 +369,6 @@ putTextRet:
   popq %rcx
   popq %rdx
   ret
-
 
 putChar:
 getOutPos:
