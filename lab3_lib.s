@@ -1,9 +1,9 @@
   .data
-in_pos: .byte 0
+in_pos: .quad 0
 out_pos: .quad 0
-in_buf: .space 20
-out_buf: .asciz "xxxxx"
-buf_size: .quad 5
+in_buf: .space 32
+out_buf: .space 32
+buf_size: .quad 32
 
   .text
   .global inImage
@@ -34,10 +34,10 @@ inImage:
 
   # Why is fgets so destructive
   leaq in_buf, %rdi
-  movq $20, %rsi
+  movq buf_size, %rsi
   movq stdin, %rdx
   call fgets
-  movw $0, in_pos
+  movl $0, in_pos
 
   popq %r11
   popq %r10
@@ -61,11 +61,11 @@ getInt:
   pushq %r9
   movq $0, %rdi
   movq $0, %rdx
-  movzwq in_pos, %rsi
-getIntLoop:
+  movq in_pos, %rsi
   leaq in_buf, %rbx    # rbx = in_buf
-  addq %rsi, %rbx   # rbx += in_pos
-  movb (%rbx), %r8b # r8b = *rbx
+
+getIntLoop:
+  movb (%rbx, %rsi), %r8b # r8b = *rbx
   incq %rsi
 
   cmpb $0x0, %r8b   # r8b == 0x0
@@ -106,11 +106,11 @@ getIntNeg:
 
 getIntBuffEmpty:
   call inImage
-  movzwq in_pos, %rsi
+  movq in_pos, %rsi
   jmp getIntLoop
 
 getIntReturn: 
-  movw %si, in_pos
+  movq %rsi, in_pos
   movq %rdx, %rax
   popq %r9
   popq %rdi
@@ -201,7 +201,7 @@ setInPos:
 
   cmpq $0, %rdi
   jl setInPosLow
-  cmpq $19, %rdi
+  cmpq buf_size, %rdi
   jg setInPosHigh
 
 setInPosRet:
@@ -214,7 +214,7 @@ setInPosLow:
   jmp setInPosRet
 
 setInPosHigh:
-  movq $19, %rdi
+  movq buf_size, %rdi
   jmp setInPosRet
 
 
@@ -264,8 +264,16 @@ putInt:
   pushq %r10
   pushq %r11
 
-  movq $1, %rsi
 
+  cmp $0, %rdi
+  jg putIntNotNeg
+  imulq $-1, %rdi
+  movq %rdi, %rsi
+  movq $'-', %rdi
+  call putChar
+  movq %rsi, %rdi
+putIntNotNeg:
+  movq $1, %rsi
  putIntFindSize:
   imulq $10, %rsi
   movq %rdi, %rax
@@ -302,7 +310,7 @@ putIntConvert:
 
   subq %r10, %rax
   
-  cmp $5, %r9
+  cmp buf_size, %r9
   je putIntFullBuff
 
   jmp putIntConvert
@@ -348,7 +356,7 @@ putTextLoop:
   incq %rcx
   incq %rax
 
-  cmpq $5, %rax
+  cmpq buf_size, %rax
   je putTextOutFull
 
   cmpb $0x0, %dl
@@ -370,7 +378,56 @@ putTextRet:
   popq %rdx
   ret
 
-putChar:
-getOutPos:
-setOutPos:
 
+putChar:
+# add c to out_buf
+# parameters:
+#   - %rdi: char
+  pushq %rcx
+  pushq %rdx
+
+  movq out_pos, %rcx
+  leaq out_buf, %rdx
+
+  movq %rdi, (%rdx, %rcx)
+  incq %rcx
+
+  cmpq buf_size, %rcx
+  jne putCharRet
+  
+  call outImage
+  movq out_pos, %rcx
+
+putCharRet:
+  movq %rcx, out_pos
+  popq %rdx
+  popq %rcx
+  ret
+
+
+getOutPos:
+  movq out_pos, %rax
+  ret
+
+
+setOutPos:
+  pushq %rdi
+
+  cmpq $0, %rdi
+  jl setOutPosLess
+
+  cmpq buf_size, %rdi
+  je setOutPosGreater
+
+setOutPosRet:
+  movq %rdi, out_pos
+  popq %rdi
+  ret
+
+setOutPosLess:
+  movq $0, %rdi
+  jmp setOutPosRet
+
+setOutPosGreater:
+  movq $0, %rdi
+  jmp setOutPosRet
