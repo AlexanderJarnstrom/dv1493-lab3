@@ -1,27 +1,24 @@
   .data
-buf: .space 20 
-pos: .byte 0
+in_pos: .quad 0
+out_pos: .quad 0
+in_buf: .space 32
+out_buf: .space 32
+buf_size: .quad 32
+
   .text
-  .global main
+  .global inImage
+  .global getInt
+  .global getText
+  .global getChar
+  .global getInPos
+  .global setInPos
+  .global outImage
+  .global putInt
+  .global putText
+  .global putChar
+  .global getOutPos
+  .global setOutPos
 
-main:
-  pushq $0
-  movq $0, %rax
-  movq $0, %rcx
-  movq $0, %rdx
-  movq $0, %rsi
-  movq $0, %rdi
-  movq $0, %r8
-  movq $0, %r9
-  movq $0, %r10
-  movq $0, %r11   
-  # Nice 0:s everywhere
-  movq $16, %rdi
-  call setInPos
-  movq pos, %rdi
-  ret
-
-# Output
 
 inImage:
   pushq %rax
@@ -36,11 +33,11 @@ inImage:
   pushq %r11
 
   # Why is fgets so destructive
-  leaq buf, %rdi
-  movq $20, %rsi
+  leaq in_buf, %rdi
+  movq buf_size, %rsi
   movq stdin, %rdx
   call fgets
-  movw $0, pos
+  movl $0, in_pos
 
   popq %r11
   popq %r10
@@ -64,11 +61,11 @@ getInt:
   pushq %r9
   movq $0, %rdi
   movq $0, %rdx
-  movzwq pos, %rsi
+  movq in_pos, %rsi
+  leaq in_buf, %rbx    # rbx = in_buf
+
 getIntLoop:
-  leaq buf, %rbx    # rbx = buf
-  addq %rsi, %rbx   # rbx += pos
-  movb (%rbx), %r8b # r8b = *rbx
+  movb (%rbx, %rsi), %r8b # r8b = *rbx
   incq %rsi
 
   cmpb $0x0, %r8b   # r8b == 0x0
@@ -109,11 +106,11 @@ getIntNeg:
 
 getIntBuffEmpty:
   call inImage
-  movzwq pos, %rsi
+  movq in_pos, %rsi
   jmp getIntLoop
 
 getIntReturn: 
-  movw %si, pos
+  movq %rsi, in_pos
   movq %rdx, %rax
   popq %r9
   popq %rdi
@@ -139,16 +136,16 @@ getText:
   movq $0x0, %rbx
   movq $0x0, %rdx
 
-  leaq buf, %rcx            # rcx = buf
-  movq pos, %rdx            # rdx = pos
-  movb (%rcx, %rdx), %bl    # dl = *(buf + pos)
+  leaq in_buf, %rcx            # rcx = in_buf
+  movq in_pos, %rdx            # rdx = in_pos
+  movb (%rcx, %rdx), %bl    # dl = *(in_buf + in_pos)
 
   cmpb $0x0, %bl            # dl == 0x0
   jne getTextLoop
   call inImage
 
 getTextLoop:
-  movb (%rcx, %rdx), %bl    # dl = *(buf + pos)
+  movb (%rcx, %rdx), %bl    # dl = *(in_buf + in_pos)
   incq %rdx
   movb %bl, (%rdi, %rax)    # *(rdi + rax) = dl
   incq %rax
@@ -160,7 +157,7 @@ getTextLoop:
   jmp getTextLoop
 
 getTextEndLoop: 
-  movq %rdx, pos
+  movq %rdx, in_pos
   popq %rdx
   popq %rcx
   popq %rbx
@@ -176,10 +173,10 @@ getChar:
   pushq %rdx
 
   movq $0x0, %rbx
-  leaq buf, %rcx
+  leaq in_buf, %rcx
 
 getCharRetry:
-  movq pos, %rdx
+  movq in_pos, %rdx
   movb (%rcx, %rdx), %bl
 
   cmpb $0x0, %bl
@@ -197,18 +194,18 @@ getCharReturn:
   
 
 setInPos:
-# Sets pos to n
+# Sets in_pos to n
 # Parameter:
 #   %rdi: n
   pushq %rdi
 
   cmpq $0, %rdi
   jl setInPosLow
-  cmpq $19, %rdi
+  cmpq buf_size, %rdi
   jg setInPosHigh
 
 setInPosRet:
-  movq %rdi, pos
+  movq %rdi, in_pos
   popq %rdi
   ret
 
@@ -217,16 +214,220 @@ setInPosLow:
   jmp setInPosRet
 
 setInPosHigh:
-  movq $19, %rdi
+  movq buf_size, %rdi
   jmp setInPosRet
 
 
 # Input
 
 outImage:
-putInt:
-putText:
-putChar:
-getOutPos:
-setOutPos:
+  pushq %rax
+  pushq %rbx
+  pushq %rcx
+  pushq %rdx
+  pushq %rsi
+  pushq %rdi
+  pushq %r8
+  pushq %r9
+  pushq %r10
+  pushq %r11
 
+  leaq out_buf, %rdi
+  xor %rax, %rax
+  call printf
+  movq $0, out_pos
+
+  popq %r11
+  popq %r10
+  popq %r9
+  popq %r8
+  popq %rdi
+  popq %rsi
+  popq %rdx
+  popq %rcx
+  popq %rbx
+  popq %rax
+  ret
+
+
+
+putInt:
+# Adds n to out_buf
+# Parameter:
+#   - %rdi: n
+  pushq %rsi
+  pushq %rax
+  pushq %rdi
+  pushq %rdx
+  pushq %r8
+  pushq %r9
+  pushq %r10
+  pushq %r11
+
+
+  cmp $0, %rdi
+  jg putIntNotNeg
+  imulq $-1, %rdi
+  movq %rdi, %rsi
+  movq $'-', %rdi
+  call putChar
+  movq %rsi, %rdi
+putIntNotNeg:
+  movq $1, %rsi
+ putIntFindSize:
+  imulq $10, %rsi
+  movq %rdi, %rax
+  movq $0, %rdx
+  idivq %rsi
+
+  cmp $10, %rax
+  jg putIntFindSize
+
+  leaq out_buf, %r8
+  movq out_pos, %r9
+  movq $0, %r10
+  movq $10, %r11
+
+putIntConvert:
+  addq %rax, %r10       # m = m + n
+  imulq $10, %r10       # m = m * 10
+  addq $0x30, %rax      # n = n + 0x30
+
+  movq %rax, (%r8, %r9) # n => (out_buf, out_pos)
+  incq %r9
+
+  movq %rsi, %rax
+  movq $0, %rdx         # x = x / 10
+  idivq %r11
+  movq %rax, %rsi
+
+  cmp $0, %rsi
+  je putIntRet
+
+  movq %rdi, %rax
+  movq $0, %rdx         # n = y / x
+  idivq %rsi
+
+  subq %r10, %rax
+  
+  cmp buf_size, %r9
+  je putIntFullBuff
+
+  jmp putIntConvert
+
+putIntRet:
+  movq %r9, out_pos
+  popq %r11
+  popq %r10
+  popq %r9
+  popq %r8
+  popq %rax
+  popq %rdi
+  popq %rdx
+  popq %rsi
+  ret
+
+putIntFullBuff:
+  call outImage
+  movq out_pos, %r9
+  jmp putIntConvert
+
+
+
+putText:
+# Parameter:
+#   - %rdi: string pointer
+  pushq %rdx
+  pushq %rcx
+  pushq %rbx
+  pushq %rax
+
+  movq $0, %rcx
+  movq $0, %rdx
+  movq $0, %rax
+  leaq out_buf, %rbx
+  movq out_pos, %rax
+
+putTextLoop:
+  movb (%rdi, %rcx), %dl
+  movb %dl, (%rbx, %rax)
+ 
+
+  incq %rcx
+  incq %rax
+
+  cmpq buf_size, %rax
+  je putTextOutFull
+
+  cmpb $0x0, %dl
+  je putTextRet
+  
+  jmp putTextLoop
+
+putTextOutFull:
+  movq %rax, out_pos
+  call outImage
+  movq out_pos, %rax
+  jmp putTextLoop
+
+putTextRet:
+  movq %rax, out_pos
+  popq %rax
+  popq %rbx
+  popq %rcx
+  popq %rdx
+  ret
+
+
+putChar:
+# add c to out_buf
+# parameters:
+#   - %rdi: char
+  pushq %rcx
+  pushq %rdx
+
+  movq out_pos, %rcx
+  leaq out_buf, %rdx
+
+  movq %rdi, (%rdx, %rcx)
+  incq %rcx
+
+  cmpq buf_size, %rcx
+  jne putCharRet
+  
+  call outImage
+  movq out_pos, %rcx
+
+putCharRet:
+  movq %rcx, out_pos
+  popq %rdx
+  popq %rcx
+  ret
+
+
+getOutPos:
+  movq out_pos, %rax
+  ret
+
+
+setOutPos:
+  pushq %rdi
+
+  cmpq $0, %rdi
+  jl setOutPosLess
+
+  cmpq buf_size, %rdi
+  je setOutPosGreater
+
+setOutPosRet:
+  movq %rdi, out_pos
+  popq %rdi
+  ret
+
+setOutPosLess:
+  movq $0, %rdi
+  jmp setOutPosRet
+
+setOutPosGreater:
+  movq $0, %rdi
+  jmp setOutPosRet
