@@ -3,7 +3,7 @@ in_pos: .quad 0
 out_pos: .quad 0
 in_buf: .space 32
 out_buf: .space 32
-buf_size: .quad 32
+buf_size: .quad 31
 
   .text
   .global inImage
@@ -32,12 +32,15 @@ inImage:
   pushq %r10
   pushq %r11
 
-  # Why is fgets so destructive
+  subq $8, %rsp
+
   leaq in_buf, %rdi
   movq buf_size, %rsi
   movq stdin, %rdx
   call fgets
   movl $0, in_pos
+
+  addq $8, %rsp
 
   popq %r11
   popq %r10
@@ -232,10 +235,24 @@ outImage:
   pushq %r10
   pushq %r11
 
+  subq $8, %rsp
+
+  movq out_pos, %rax
+  movq buf_size, %rbx
+  cmpq %rax, %rbx
+  je outImageNoEarly
+
+  movq $10, %rdi
+  call putChar
+
+outImageNoEarly:
+
   leaq out_buf, %rdi
   xor %rax, %rax
   call printf
   movq $0, out_pos
+
+  addq $8, %rsp
 
   popq %r11
   popq %r10
@@ -266,7 +283,7 @@ putInt:
 
 
   cmp $0, %rdi
-  jg putIntNotNeg
+  jge putIntNotNeg
   imulq $-1, %rdi
   movq %rdi, %rsi
   movq $'-', %rdi
@@ -274,15 +291,19 @@ putInt:
   movq %rsi, %rdi
 putIntNotNeg:
   movq $1, %rsi
- putIntFindSize:
+  movq %rdi, %rax
+putIntFindSize:
+  cmp $9, %rax
+  jle putIntFoundSize
+
   imulq $10, %rsi
   movq %rdi, %rax
   movq $0, %rdx
   idivq %rsi
 
-  cmp $10, %rax
-  jg putIntFindSize
+  jmp putIntFindSize
 
+putIntFoundSize:
   leaq out_buf, %r8
   movq out_pos, %r9
   movq $0, %r10
