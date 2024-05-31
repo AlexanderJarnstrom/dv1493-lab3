@@ -112,7 +112,7 @@ getIntBuffEmpty:
   movq in_pos, %rsi
   jmp getIntLoop
 
-getIntReturn: 
+getIntReturn:
   movq %rsi, in_pos
   movq %rdx, %rax
   popq %r9
@@ -152,14 +152,14 @@ getTextLoop:
   incq %rdx
   movb %bl, (%rdi, %rax)    # *(rdi + rax) = dl
   incq %rax
-  
+
   cmpb $0x0, %bl            # bh == 0x0
   je getTextEndLoop
   cmpq %rsi, %rax           # rbx == rsi
   je getTextEndLoop
   jmp getTextLoop
 
-getTextEndLoop: 
+getTextEndLoop:
   movq %rdx, in_pos
   popq %rdx
   popq %rcx
@@ -194,7 +194,7 @@ getCharReturn:
   popq %rcx
   popq %rbx
   ret
-  
+
 
 setInPos:
 # Sets in_pos to n
@@ -330,7 +330,7 @@ putIntConvert:
   idivq %rsi
 
   subq %r10, %rax
-  
+
   cmp buf_size, %r9
   je putIntFullBuff
 
@@ -372,7 +372,7 @@ putText:
 putTextLoop:
   movb (%rdi, %rcx), %dl
   movb %dl, (%rbx, %rax)
- 
+
 
   incq %rcx
   incq %rax
@@ -382,7 +382,7 @@ putTextLoop:
 
   cmpb $0x0, %dl
   je putTextRet
-  
+
   jmp putTextLoop
 
 putTextOutFull:
@@ -415,7 +415,7 @@ putChar:
 
   cmpq buf_size, %rcx
   jne putCharRet
-  
+
   call outImage
   movq out_pos, %rcx
 
