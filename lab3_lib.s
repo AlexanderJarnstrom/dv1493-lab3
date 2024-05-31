@@ -1,394 +1,454 @@
-.section.data
-inbuf:    .space 128          # Input buffer
-outBuf:   .space 128          # Output buffer
-inpos:    .quad 0             # Current input position
-outPos:   .quad 0             # Current output position
-newline:  .asciz "\n"         
-nullchar: .byte 0             # Null character
-int_count: .quad 0           # Counter for the number of integers
-int_stack: .space 40         
-int_sum:   .quad 0          
-zero:     .quad 0             # Zero
-maxpos:   .quad 127           # Max position index (128 - 1)
-stdout:   .quad 1             # Standard output
+  .data
+in_pos: .quad 0
+out_pos: .quad 0
+in_buf: .space 32
+out_buf: .space 32
+buf_size: .quad 31
 
-.text
+  .text
+  .global inImage
+  .global getInt
+  .global getText
+  .global getChar
+  .global getInPos
+  .global setInPos
+  .global outImage
+  .global putInt
+  .global putText
+  .global putChar
+  .global getOutPos
+  .global setOutPos
 
-.global inImage
-.global getInt
-.global getText
-.global getChar
-.global getInPos
-.global setInPos
-.global outImage
-.global putInt
-.global putText
-.global putChar
-.global getOutPos
-.global setOutPos
-.global printf
-.extern stdin
-.extern fgets
-
-# Ensure the input buffer is filled
-checkInBuffer:
-    movq inpos(%rip), %rax
-    cmpq maxpos(%rip), %rax  
-    jl .buffer_ok
-    call inImage             
-.buffer_ok:
-    ret
 
 inImage:
-    subq $8, %rsp             
-    leaq inbuf(%rip), %rdi   
-    movq $128, %rsi          
-    movq stdin(%rip), %rdx    
-    call fgets                # Call fgets to read input
-    addq $8, %rsp             
-    movq $0, inpos(%rip)      
-    ret
+  pushq %rax
+  pushq %rbx
+  pushq %rcx
+  pushq %rdx
+  pushq %rsi
+  pushq %rdi
+  pushq %r8
+  pushq %r9
+  pushq %r10
+  pushq %r11
 
-isDigit:
-    cmpb $'0', %dil
-    jb not_digit
-    cmpb $'9', %dil
-    ja not_digit
-    movq $1, %rax
-    ret
+  subq $8, %rsp
 
-not_digit:
-    movq $0, %rax
-    ret
+  leaq in_buf, %rdi
+  movq buf_size, %rsi
+  movq stdin, %rdx
+  call fgets
+  movl $0, in_pos
+
+  addq $8, %rsp
+
+  popq %r11
+  popq %r10
+  popq %r9
+  popq %r8
+  popq %rdi
+  popq %rsi
+  popq %rdx
+  popq %rcx
+  popq %rbx
+  popq %rax
+  ret
+
 
 getInt:
-    call    checkInBuffer          
-    movq    inpos(%rip), %rsi      
-    leaq    inbuf(%rip), %rdi
-    addq    %rsi, %rdi              
-    xor     %rax, %rax           
-    mov     $1, %rbx                
+  pushq %r8
+  pushq %rbx
+  pushq %rdx
+  pushq %rsi
+  pushq %rdi
+  pushq %r9
+  movq $0, %rdi
+  movq $0, %rdx
+  movq in_pos, %rsi
+  leaq in_buf, %rbx    # rbx = in_buf
 
-.parse_loop:
-    movb    (%rdi), %dl
-    cmpb    $' ', %dl
-    je      .skip_whitespace
+getIntLoop:
+  movb (%rbx, %rsi), %r8b # r8b = *rbx
+  incq %rsi
 
-    cmpb    $'+', %dl
-    je      .check_digit
+  cmpb $0x0, %r8b   # r8b == 0x0
+  je getIntBuffEmpty
 
-    cmpb    $'-', %dl
-    je      .negate
+  cmpb $0x2b, %r8b  # r8b == +
+  je getIntLoop
 
-    # Check if the character is a digit
-    movb    %dl, %dil
-    call    isDigit
-    testq   %rax, %rax
-    jz      .end_parse
+  cmpb $0x2d, %r8b  # r8b == -
+  je getIntNeg
 
-    subb    $'0', %dl
-    imulq   $10, %rax
-    addq    %rdx, %rax
+  cmpb $0x30, %r8b  # r8b < 0x30
+  jl getIntLetter
 
-.update_pos:
-    incq    %rsi
-    incq    %rdi
-    jmp     .parse_loop
+  cmpb $0x39, %r8b  # r8b > 0x39
+  jg getIntLetter
 
-.skip_whitespace:
-    incq    %rsi
-    incq    %rdi
-    jmp     .parse_loop
+getIntNum:
+  orb $0x2, %dil    # dil | 0b0000 0010
+  subb $0x30, %r8b  # r8b - 0x30
+  imulq $10, %rdx   # rdx * 10
+  movsbq %r8b, %r8  # r8b -> r8
+  addq %r8, %rdx    # rdx + r8
+  jmp getIntLoop
 
-.negate:
-    mov     $-1, %rbx
-    jmp     .update_pos
+getIntLetter:
+  testb $0x2, %dil  # dil & 0b0000 0010
+  je getIntLoop
+  testb $0x1, %dil  # dil & 0b0000 0001
+  je getIntNotNeg
+  imulq $-1, %rdx   # Negate
+getIntNotNeg:
+  jmp getIntReturn
 
-.check_digit:
-    jmp     .update_pos
+getIntNeg:
+  orb $0x1, %dil    # dil | 0b0000 0001
+  jmp getIntLoop
 
-.end_parse:
-    imulq   %rbx, %rax             
-    # Store the integer in the stack
-    movq    int_count(%rip), %rcx
-    cmpq    $5, %rcx
-    jge     .skip_store
-    leaq    int_stack(%rip), %rdx
-    movq    %rax, (%rdx, %rcx, 8)
-    addq    %rax, int_sum(%rip)
-    incq    int_count(%rip)
+getIntBuffEmpty:
+  call inImage
+  movq in_pos, %rsi
+  jmp getIntLoop
 
-.skip_store:
-    movq    %rsi, inpos(%rip)       # Update input position
-    ret
+getIntReturn: 
+  movq %rsi, in_pos
+  movq %rdx, %rax
+  popq %r9
+  popq %rdi
+  popq %rsi
+  popq %rdx
+  popq %rbx
+  popq %r8
+  ret
 
-printIntegers:
-    pushq %rbp
-    movq  %rsp, %rbp
-    subq  $32, %rsp                
-
-    movq  int_sum(%rip), %rdi      # Load sum into %rdi
-    call  putInt                   # Print the sum
-
-    # Load the address of newline directly into %rdi
-    leaq  newline(%rip), %rdi
-    call  putText                  
-
-    leaq  int_stack(%rip), %rsi    
-    movq  int_count(%rip), %rcx   
-    movq  $0, %rdx                
-
-.print_loop:
-    cmpq  %rdx, %rcx
-    jge   .end_print
-    movq  (%rsi, %rdx, 8), %rdi    
-    call  putInt                   
-    movq  $' ', %rdi               
-    call  putChar
-    incq  %rdx
-    jmp   .print_loop
-
-.end_print:
-
-    leaq  newline(%rip), %rdi
-    call  putText                 
-
-    # Reset count and sum directly
-    movq  $0, int_count(%rip)      # Reset count
-    movq  $0, int_sum(%rip)        # Reset sum
-    addq  $32, %rsp
-    popq  %rbp
-    ret
 
 getText:
-    call    checkInBuffer           
-    movq    %rdi, %r8               
-    movq    %rsi, %rcx              # Max length to read
-    movq    inpos(%rip), %rsi       # Current position
-    leaq    inbuf(%rip), %rdi
-    addq    %rsi, %rdi              
-    xor     %rax, %rax              
-    xor     %rdx, %rdx             
+# Get n characters from input_buffer
+# Parameters:
+#   rdi: buffer to store characters
+#   rsi: number of characters to read
+# Returns:
+#   rax: number of characters read
+  pushq %rbx
+  pushq %rcx
+  pushq %rdx
 
-.read_loop:
-    cmpq    %rcx, %rax
-    je      .end_read               
+  movq $0x0, %rax
+  movq $0x0, %rbx
+  movq $0x0, %rdx
 
-    movb    (%rdi), %dl
-    cmpb    $0, %dl
-    je      .end_read              
+  leaq in_buf, %rcx            # rcx = in_buf
+  movq in_pos, %rdx            # rdx = in_pos
+  movb (%rcx, %rdx), %bl    # dl = *(in_buf + in_pos)
 
-    movb    %dl, (%r8)
-    incq    %r8                     
-    incq    %rdi                    
-    incq    %rsi                    
-    incq    %rax                    
-    jmp     .read_loop
+  cmpb $0x0, %bl            # dl == 0x0
+  jne getTextLoop
+  call inImage
 
-.end_read:
-    movb    $0, (%r8)               
-    movq    %rsi, inpos(%rip)       
-    ret
+getTextLoop:
+  movb (%rcx, %rdx), %bl    # dl = *(in_buf + in_pos)
+  incq %rdx
+  movb %bl, (%rdi, %rax)    # *(rdi + rax) = dl
+  incq %rax
+  
+  cmpb $0x0, %bl            # bh == 0x0
+  je getTextEndLoop
+  cmpq %rsi, %rax           # rbx == rsi
+  je getTextEndLoop
+  jmp getTextLoop
+
+getTextEndLoop: 
+  movq %rdx, in_pos
+  popq %rdx
+  popq %rcx
+  popq %rbx
+  ret
+
 
 getChar:
-    call    checkInBuffer           # Ensure buffer is filled
-    movq    inpos(%rip), %rsi       
-    leaq    inbuf(%rip), %rdi
-    addq    %rsi, %rdi             
-    movb    (%rdi), %al             # Read character
-    incq    %rsi
-    movq    %rsi, inpos(%rip)      
-    ret
+# Gets one char from buffer
+# Returns:
+#   rax: the char
+  pushq %rbx
+  pushq %rcx
+  pushq %rdx
 
+  movq $0x0, %rbx
+  leaq in_buf, %rcx
 
-exit:
-    movq    $60, %rax               
-    xor     %rdi, %rdi            
-    syscall                         
+getCharRetry:
+  movq in_pos, %rdx
+  movb (%rcx, %rdx), %bl
+
+  cmpb $0x0, %bl
+  jne getCharReturn
+  call inImage
+  jmp getCharRetry
+
+getCharReturn:
+  movq $0x0, %rax
+  movb %bl, %al
+  popq %rdx
+  popq %rcx
+  popq %rbx
+  ret
+  
 
 setInPos:
-    pushq %rdi
+# Sets in_pos to n
+# Parameter:
+#   %rdi: n
+  pushq %rdi
 
-    cmpq $0, %rdi
-    jl setInPosLow
-    cmpq $127, %rdi
-    jg setInPosHigh
+  cmpq $0, %rdi
+  jl setInPosLow
+  cmpq buf_size, %rdi
+  jg setInPosHigh
 
 setInPosRet:
-    movq %rdi, inpos(%rip)
-    popq %rdi
-    ret
+  movq %rdi, in_pos
+  popq %rdi
+  ret
 
 setInPosLow:
-    movq $0, %rdi
-    jmp setInPosRet
+  movq $0, %rdi
+  jmp setInPosRet
 
 setInPosHigh:
-    movq $127, %rdi
-    jmp setInPosRet
+  movq buf_size, %rdi
+  jmp setInPosRet
+
+
+# Input
 
 outImage:
-    pushq %rax
-    pushq %rbx
-    pushq %rcx
-    pushq %rdx
-    pushq %rsi
-    pushq %rdi
-    pushq %r8
-    pushq %r9
-    pushq %r10
-    pushq %r11
+  pushq %rax
+  pushq %rbx
+  pushq %rcx
+  pushq %rdx
+  pushq %rsi
+  pushq %rdi
+  pushq %r8
+  pushq %r9
+  pushq %r10
+  pushq %r11
 
-    # Ensure stack alignment
-    subq $8, %rsp
+  subq $8, %rsp
 
-    leaq outBuf(%rip), %rdi
-    movq $0, %rax
-    call printf
-    
-    addq $8, %rsp  # Restore stack alignment
-    
-    movq $0, outPos(%rip)
+  movq out_pos, %rax
+  movq buf_size, %rbx
+  cmpq %rax, %rbx
+  je outImageNoEarly
 
-    popq %r11
-    popq %r10
-    popq %r9
-    popq %r8
-    popq %rdi
-    popq %rsi
-    popq %rdx
-    popq %rcx
-    popq %rbx
-    popq %rax
-    ret
+  movq $10, %rdi
+  call putChar
+
+outImageNoEarly:
+
+  leaq out_buf, %rdi
+  xor %rax, %rax
+  call printf
+  movq $0, out_pos
+
+  addq $8, %rsp
+
+  popq %r11
+  popq %r10
+  popq %r9
+  popq %r8
+  popq %rdi
+  popq %rsi
+  popq %rdx
+  popq %rcx
+  popq %rbx
+  popq %rax
+  ret
+
 
 
 putInt:
-    pushq %rsi
-    pushq %rdi
-    pushq %rdx
-    pushq %rbx
-    pushq %r10
-    pushq %r11
+# Adds n to out_buf
+# Parameter:
+#   - %rdi: n
+  pushq %rsi
+  pushq %rax
+  pushq %rdi
+  pushq %rdx
+  pushq %r8
+  pushq %r9
+  pushq %r10
+  pushq %r11
 
-    movq %rdi, %rax          
-    xor %rbx, %rbx           
-    movq $1, %rbx            
-    movq $10, %r11          
 
+  cmp $0, %rdi
+  jge putIntNotNeg
+  imulq $-1, %rdi
+  movq %rdi, %rsi
+  movq $'-', %rdi
+  call putChar
+  movq %rsi, %rdi
+putIntNotNeg:
+  movq $1, %rsi
+  movq %rdi, %rax
 putIntFindSize:
-    movq %rax, %rdx
-    xor %rdx, %rdx          
-    divq %r11                
-    testq %rax, %rax         
-    jz putIntPrint          
-    imulq $10, %rbx          
-    jmp putIntFindSize      
+  cmp $9, %rax
+  jle putIntFoundSize
 
-putIntPrint:
-    movq %rdi, %rax          
+  imulq $10, %rsi
+  movq %rdi, %rax
+  movq $0, %rdx
+  idivq %rsi
 
-putIntLoop:
-    xor %rdx, %rdx           
-    divq %rbx                
-    addb $'0', %dl           # Convert to ASCII
-    movb %dl, %dil           
-    call putChar             
-    xor %rdx, %rdx           
-    movq %rbx, %rax         
-    movq $10, %rbx          
-    divq %rbx               
-    cmpq $1, %rax          
-    jb putIntEnd             
-    movq %rax, %rbx          
-    movq %rdi, %rax         
-    jmp putIntLoop         
+  jmp putIntFindSize
 
-putIntEnd:
-    popq %r11
-    popq %r10
-    popq %rbx
-    popq %rdx
-    popq %rdi
-    popq %rsi
-    ret
+putIntFoundSize:
+  leaq out_buf, %r8
+  movq out_pos, %r9
+  movq $0, %r10
+  movq $10, %r11
 
-putChar:
-    pushq %rcx
-    pushq %rdx
+putIntConvert:
+  addq %rax, %r10       # m = m + n
+  imulq $10, %r10       # m = m * 10
+  addq $0x30, %rax      # n = n + 0x30
 
-    movq outPos(%rip), %rcx
-    leaq outBuf(%rip), %rdx
+  movq %rax, (%r8, %r9) # n => (out_buf, out_pos)
+  incq %r9
 
-    movb %dil, (%rdx, %rcx)
-    incq %rcx
+  movq %rsi, %rax
+  movq $0, %rdx         # x = x / 10
+  idivq %r11
+  movq %rax, %rsi
 
-    cmpq $127, %rcx
-    jne putCharRet
+  cmp $0, %rsi
+  je putIntRet
 
-    call outImage
-    movq $0, %rcx
+  movq %rdi, %rax
+  movq $0, %rdx         # n = y / x
+  idivq %rsi
 
-putCharRet:
-    movq %rcx, outPos(%rip)
-    popq %rdx
-    popq %rcx
-    ret
+  subq %r10, %rax
+  
+  cmp buf_size, %r9
+  je putIntFullBuff
+
+  jmp putIntConvert
+
+putIntRet:
+  movq %r9, out_pos
+  popq %r11
+  popq %r10
+  popq %r9
+  popq %r8
+  popq %rax
+  popq %rdi
+  popq %rdx
+  popq %rsi
+  ret
+
+putIntFullBuff:
+  call outImage
+  movq out_pos, %r9
+  jmp putIntConvert
+
+
 
 putText:
-    pushq %rdx
-    pushq %rcx
-    pushq %rbx
-    pushq %rax
+# Parameter:
+#   - %rdi: string pointer
+  pushq %rdx
+  pushq %rcx
+  pushq %rbx
+  pushq %rax
 
-    movq $0, %rcx
-    movq $0, %rdx
-    leaq outBuf(%rip), %rbx
-    movq outPos(%rip), %rax
+  movq $0, %rcx
+  movq $0, %rdx
+  movq $0, %rax
+  leaq out_buf, %rbx
+  movq out_pos, %rax
 
 putTextLoop:
-    movb (%rdi, %rcx), %dl
-    testb %dl, %dl
-    je putTextEnd
-    movb %dl, (%rbx, %rax)
-    incq %rcx
-    incq %rax
-    cmpq $128, %rax
-    jne putTextLoop
+  movb (%rdi, %rcx), %dl
+  movb %dl, (%rbx, %rax)
+ 
 
-putTextEnd:
-    movb $0, (%rbx, %rax)    # Null-terminate the output buffer
-    movq %rax, outPos(%rip)
-    popq %rax
-    popq %rbx
-    popq %rcx
-    popq %rdx
-    ret
+  incq %rcx
+  incq %rax
+
+  cmpq buf_size, %rax
+  je putTextOutFull
+
+  cmpb $0x0, %dl
+  je putTextRet
+  
+  jmp putTextLoop
+
+putTextOutFull:
+  movq %rax, out_pos
+  call outImage
+  movq out_pos, %rax
+  jmp putTextLoop
+
+putTextRet:
+  movq %rax, out_pos
+  popq %rax
+  popq %rbx
+  popq %rcx
+  popq %rdx
+  ret
+
+
+putChar:
+# add c to out_buf
+# parameters:
+#   - %rdi: char
+  pushq %rcx
+  pushq %rdx
+
+  movq out_pos, %rcx
+  leaq out_buf, %rdx
+
+  movq %rdi, (%rdx, %rcx)
+  incq %rcx
+
+  cmpq buf_size, %rcx
+  jne putCharRet
+  
+  call outImage
+  movq out_pos, %rcx
+
+putCharRet:
+  movq %rcx, out_pos
+  popq %rdx
+  popq %rcx
+  ret
 
 
 getOutPos:
-    movq outPos, %rax
-    ret
+  movq out_pos, %rax
+  ret
 
 
 setOutPos:
-    pushq %rdi
+  pushq %rdi
 
-    cmpq $0, %rdi
-    jl setOutPosLess
+  cmpq $0, %rdi
+  jl setOutPosLess
 
-    cmpq inbuf, %rdi
-    je setOutPosGreater
+  cmpq buf_size, %rdi
+  je setOutPosGreater
 
 setOutPosRet:
-    movq %rdi, outPos
-    popq %rdi
-    ret
+  movq %rdi, out_pos
+  popq %rdi
+  ret
 
 setOutPosLess:
-    movq $0, %rdi
-    jmp setOutPosRet
+  movq $0, %rdi
+  jmp setOutPosRet
 
 setOutPosGreater:
-    movq $0, %rdi
-    jmp setOutPosRet
+  movq $0, %rdi
+  jmp setOutPosRet
