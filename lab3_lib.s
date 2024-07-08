@@ -146,16 +146,19 @@ getText:
   cmpb $0x0, %bl # dl == 0x0
   jne .getTextLoop
   call inImage
+  movq in_pos, %rdx
 
 .getTextLoop:
   movb (%rcx, %rdx), %bl # dl = *(in_buf + in_pos)
   incq %rdx
+
+  cmpb $0x0, %bl # bh == 0x0
+  je .getTextEndLoop
+
   movb %bl, (%rdi, %rax) # *(rdi + rax) = dl
   incq %rax
   
-  cmpb $0x0, %bl # bh == 0x0
-  je .getTextEndLoop
-  cmpq %rsi, %rax # rbx == rsi
+  cmpq %rsi, %rax # rax == rsi
   je .getTextEndLoop
   jmp .getTextLoop
 
@@ -243,6 +246,9 @@ outImage:
   je .outImageNoEarly # If early call add \n (10) at end.
 
   movq $10, %rdi
+  call putChar
+
+  movq $0, %rdi
   call putChar
 
 .outImageNoEarly:
@@ -376,17 +382,17 @@ putText:
 
 .putTextLoop:
   movb (%rdi, %rcx), %dl
-  movb %dl, (%rbx, %rax)
-
   incq %rcx
+
+  cmpb $0x0, %dl # check if in buffer is empty
+  je .putTextRet
+  
+  movb %dl, (%rbx, %rax)
   incq %rax
 
   cmpq buf_size, %rax # Check if out buffer is full
   je .putTextOutFull
 
-  cmpb $0x0, %dl # check if in buffer is empty
-  je .putTextRet
-  
   jmp .putTextLoop
 
 .putTextOutFull:
